@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tgz
+.env
+config.env
+.DS_Store
+.claude/
+.claude.json
+
+# Dev & test artifacts
+test-*.mjs
+*.bat
+
+# Runtime data
+.bridge/
