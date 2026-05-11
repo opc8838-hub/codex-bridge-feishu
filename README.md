@@ -70,7 +70,7 @@
 
 ```bash
 # Clone
-git clone https://github.com/your-org/codex-bridge-feishu.git
+git clone https://github.com/opc8838-hub/codex-bridge-feishu.git
 cd codex-bridge-feishu
 
 # Install dependencies
