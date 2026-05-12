@@ -28,7 +28,28 @@ import {
 } from './validators.js';
 import { formatRelativeTime } from './session-scanner.js';
 import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
 import { htmlToFeishuMarkdown } from './feishu-markdown.js';
+
+// ── Memory layer ─────────────────────────────────────────────
+
+const MEMORY_FILE = path.join(os.homedir(), '.codex-bridge-memory.md');
+
+function readMemory(): string {
+  try {
+    if (fs.existsSync(MEMORY_FILE)) {
+      return fs.readFileSync(MEMORY_FILE, 'utf-8').trim();
+    }
+  } catch { /* file read error — return empty */ }
+  return '';
+}
+
+function wrapPromptWithMemory(text: string): string {
+  const memory = readMemory();
+  if (!memory) return text;
+  return `[持久记忆 — 关于用户偏好、项目上下文、常用设置]\n${memory}\n\n---\n\n[用户消息]\n${text}`;
+}
 
 // ── /list cache (per-chat, 5 min TTL) ───────────────────────
 
@@ -273,7 +294,7 @@ async function handleMessage(ctx: AppContext, msg: InboundMessage): Promise<void
   };
 
   try {
-    const promptText = text || (hasAttachments ? 'Describe this image.' : '');
+    const promptText = wrapPromptWithMemory(text || (hasAttachments ? 'Describe this image.' : ''));
 
     const result = await conversation.processMessage(
       ctx,
@@ -401,11 +422,39 @@ async function handleCommand(
         '/usage - Show token usage for current session',
         '/usage_all - Show token usage across all sessions',
         '/stop - Stop current session',
+        '/memory - View cross-session memory',
         '/perm allow|allow_session|deny <id> - Permission response',
         '1/2/3 - Quick permission reply (single pending)',
         '/help - Show this help',
       ].join('\n');
       break;
+
+    case '/memory': {
+      const mem = readMemory();
+      if (!mem) {
+        response = [
+          '**Memory (empty)**',
+          '',
+          'No cross-session memory yet. Codex reads `~/.codex-bridge-memory.md` before each conversation.',
+          '',
+          'To add memory, tell Codex something like:',
+          '"记住：我的项目在 C:\\\\projects 下，用 TypeScript，缩进 2 空格"',
+          'Codex will update the memory file for future sessions.',
+        ].join('\n');
+      } else {
+        response = [
+          `**Cross-Session Memory** (${mem.split('\n').length} lines)`,
+          '',
+          '```',
+          mem.slice(0, 2000),
+          '```',
+          '',
+          mem.length > 2000 ? '(truncated — file is larger)' : '',
+          'Codex reads this before every conversation. Update it by telling Codex your preferences.',
+        ].join('\n');
+      }
+      break;
+    }
 
     case '/new': {
       const oldBinding = resolveBinding(ctx, msg.chatId);
