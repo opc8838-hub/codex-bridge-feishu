@@ -312,9 +312,11 @@ export class CodexProvider {
             // Map permission mode to Codex approval policy
             if (autoApprove) {
               threadOpts.approvalPolicy = 'never';
+              threadOpts.sandboxMode = 'danger-full-access';
             } else {
               // Without auto-approve, use on-request (Codex handles internally)
               threadOpts.approvalPolicy = 'on-request';
+              threadOpts.sandboxMode = 'workspace-write';
             }
 
             // Start or resume thread
