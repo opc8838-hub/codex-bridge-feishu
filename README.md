@@ -1,5 +1,7 @@
 # codex-bridge-feishu
 
+[**中文文档**](./README.zh.md) | English
+
 > 📱💻 Chat with [OpenAI Codex CLI](https://github.com/openai/codex) from Feishu/Lark — code, debug, and refactor from your phone.
 
 **codex-bridge-feishu** is a lightweight Node.js daemon that bridges Feishu/Lark messaging to your local Codex CLI. Send a message in Feishu, and Codex executes in your project directory. Responses are streamed back as real-time cards with live progress, tool execution status, and token usage.

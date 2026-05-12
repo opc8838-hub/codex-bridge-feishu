@@ -1,5 +1,7 @@
 # codex-bridge-feishu
 
+中文 | [**English**](./README.md)
+
 > 📱💻 在飞书里操控 [OpenAI Codex CLI](https://github.com/openai/codex) —— 离开电脑也能写代码、改项目、生成文件。
 
 **codex-bridge-feishu** 是一个轻量 Node.js 守护进程，把飞书消息桥接到本地 Codex CLI。飞书发一条消息，Codex 就在你的项目目录里执行，思考和工具调用过程实时流式回传，像终端一样直观。
