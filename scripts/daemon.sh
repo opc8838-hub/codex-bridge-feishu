@@ -31,6 +31,7 @@ ensure_built() {
 
 clean_env() {
   :
+}
 
 read_pid() {
   [ -f "$PID_FILE" ] && cat "$PID_FILE" 2>/dev/null || echo ""

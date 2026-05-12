@@ -1,0 +1,28 @@
+[Unit]
+Description=codex-bridge-feishu — Feishu to OpenAI Codex CLI bridge
+Documentation=https://github.com/opc8838-hub/codex-bridge-feishu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%u
+WorkingDirectory=/opt/codex-bridge-feishu
+ExecStart=/usr/bin/node dist/daemon.mjs
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+# Logging
+StandardOutput=append:.bridge/logs/bridge.log
+StandardError=append:.bridge/logs/bridge.log
+
+# Security hardening (optional, uncomment and adjust as needed)
+# NoNewPrivileges=yes
+# PrivateTmp=yes
+# ProtectSystem=strict
+# ProtectHome=read-only
+# ReadWritePaths=%h/.codex %h/.bridge
+
+[Install]
+WantedBy=multi-user.target

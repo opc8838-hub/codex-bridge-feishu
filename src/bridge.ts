@@ -27,6 +27,7 @@ import {
   validateMode,
 } from './validators.js';
 import { formatRelativeTime } from './session-scanner.js';
+import os from 'node:os';
 import { htmlToFeishuMarkdown } from './feishu-markdown.js';
 
 // ── /list cache (per-chat, 5 min TTL) ───────────────────────
@@ -90,7 +91,7 @@ function resolveBinding(ctx: AppContext, chatId: string): ChannelBinding {
 }
 
 function createNewBinding(ctx: AppContext, chatId: string, workDir?: string): ChannelBinding {
-  const cwd = workDir || ctx.config.defaultWorkDir || process.env.HOME || '';
+  const cwd = workDir || ctx.config.defaultWorkDir || os.homedir();
   const model = ctx.config.defaultModel || '';
   const session = ctx.store.createSession(`Bridge: ${chatId}`, model, undefined, cwd);
   return ctx.store.upsertChannelBinding({

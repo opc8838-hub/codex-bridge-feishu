@@ -66,6 +66,16 @@
 - **Codex CLI** — `npm install -g @openai/codex` then `codex login`
 - **Feishu self-built app** — see [Feishu Setup](#-feishu-app-setup) below
 
+### Platform Support
+
+| Platform | Status | Daemon |
+|----------|--------|--------|
+| **macOS** | ✅ Full support | `launchd` via `scripts/daemon.sh` |
+| **Linux** | ✅ Full support | `systemd` or `pm2` |
+| **Windows** | ✅ Full support | `pm2` or Task Scheduler |
+
+> 💡 The bridge is pure Node.js with zero native dependencies — it works anywhere Node.js runs. The only platform-specific code is Codex CLI path resolution, which handles Windows (`.exe`/`.cmd`), macOS (`brew`), and Linux (`PATH`) automatically.
+
 ### Install
 
 ```bash
@@ -121,22 +131,49 @@ CTI_AUTO_APPROVE=true                   # Recommended for Codex
 ### Start
 
 ```bash
-# Foreground (testing)
+# Foreground (testing — all platforms)
 npm start
+```
 
-# Daemon — auto-restart on crash (macOS)
+**macOS (launchd):**
+
+```bash
 bash scripts/daemon.sh start
 bash scripts/daemon.sh status
 bash scripts/daemon.sh logs
+bash scripts/daemon.sh stop
+```
 
-# Windows / Linux — use pm2 or similar
-pm2 start dist/daemon.mjs --name codex-bridge-feishu
+**Linux (systemd):**
+
+```bash
+# Edit WorkingDirectory in scripts/codex-bridge-feishu.service first
+sudo cp scripts/codex-bridge-feishu.service /etc/systemd/system/
+sudo systemctl enable --now codex-bridge-feishu
+sudo journalctl -u codex-bridge-feishu -f
+```
+
+**Windows / Linux / macOS (pm2 — universal):**
+
+```bash
+npm install -g pm2
+pm2 start ecosystem.config.cjs
+pm2 status
+pm2 logs codex-bridge-feishu
+pm2 save          # auto-restart on boot
 ```
 
 ### Verify
 
 ```bash
+# macOS
 bash scripts/daemon.sh logs
+
+# systemd
+sudo journalctl -u codex-bridge-feishu -n 20
+
+# pm2
+pm2 logs codex-bridge-feishu --lines 20
 ```
 
 You should see:
