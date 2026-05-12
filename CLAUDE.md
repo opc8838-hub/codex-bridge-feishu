@@ -1,133 +1,74 @@
-# CLAUDE.md — Setup Guide for AI Assistants
+# CLAUDE.md — codex-bridge-feishu
 
-When a user clones this project and asks you to help set it up, follow these steps.
+## What this project does
 
-## What This is
+A Node.js daemon that bridges Feishu/Lark to local OpenAI Codex CLI.
+Users chat with a Feishu bot → daemon spawns Codex → streams replies back as cards.
 
-Feishu Codex Bridge — a Node.js daemon that connects Feishu/Lark to OpenAI Codex CLI. Users chat with a bot in Feishu, the daemon calls Codex via `@openai/codex-sdk`, and streams responses back as real-time cards.
+Full architecture and setup: see [README.md](./README.md).
 
-## Prerequisites
+## Do NOT introduce
 
-- **Node.js >= 20** (`node --version`)
-- **Codex CLI** installed and authenticated (`codex --version`)
-- **Feishu enterprise self-built app** (see Feishu App Setup below)
+- New framework dependencies (Express, Next.js, etc.) — keep it a single daemon process
+- Alternative AI providers baked into core — use the provider pattern (`codex-provider.ts`)
+- Any cloud service requirement — the daemon runs locally, zero cloud deps
+- New npm scripts without updating this file
 
-## Install & Build
-
-```bash
-cd /path/to/codex-bridge-feishu
-npm install
-npm run build
-```
-
-`npm run build` uses esbuild to bundle `src/` → `dist/daemon.mjs`.
-
-## Configure
+## Quick commands
 
 ```bash
-cp config.env.example config.env
+npm run dev          # Foreground, tsx hot-reload
+npm run build        # esbuild bundle → dist/daemon.mjs
+npm run typecheck    # tsc --noEmit
+npm start            # Run built bundle
 ```
 
-Edit `config.env`:
+## Key files
 
-```bash
-# ── Required ──
-CTI_FEISHU_APP_ID=cli_xxxxxxxxxx
-CTI_FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
-CTI_DEFAULT_WORKDIR=/path/to/your/project
+| File | Role |
+|------|------|
+| `src/main.ts` | Entry: load config, resolve CLI, start Feishu, run loop |
+| `src/codex-provider.ts` | Wrap `@openai/codex-sdk` → unified SSE stream |
+| `src/conversation.ts` | SSE events → streaming Feishu CardKit cards |
+| `src/feishu.ts` | Feishu WebSocket + REST via `@larksuiteoapi/node-sdk` |
+| `src/bridge.ts` | Message router, slash commands, `/help` |
+| `src/store.ts` | JSON file session store (`.bridge/data/`) |
+| `src/config.ts` | `config.env` parser |
 
-# ── Optional ──
-CTI_FEISHU_DOMAIN=feishu            # "feishu" or "lark"
-CTI_DEFAULT_MODE=code               # code / plan / ask
-CTI_DEFAULT_MODEL=                # Optional — leave empty for ChatGPT Plus auto-select
-CTI_FEISHU_REQUIRE_MENTION=true     # Require @bot in group chats
-# CTI_FEISHU_ALLOWED_USERS=ou_xxx   # Access control (comma-separated)
-CTI_AUTO_APPROVE=true               # Auto-approve tool executions (recommended)
-# CTI_CODEX_EXECUTABLE=/path/to/codex  # Override CLI path
+## Provider pattern
 
-# ── OpenAI API (if using API key instead of ChatGPT subscription) ──
-# OPENAI_API_KEY=your-key
-# OPENAI_BASE_URL=https://your-provider.com/v1
-```
+Only `codex-provider.ts` knows about Codex. It exports:
+- `CodexProvider.streamChat(params)` → `ReadableStream<string>` (SSE events)
+- `resolveCodexCliPath()` / `preflightCheck()` — CLI discovery
+- `classifyAuthError()` — detect auth vs other errors
 
-## Feishu App Setup
+The SSE format (`text`, `tool_use`, `tool_result`, `result`, `error`, `status`) is consumed by `conversation.ts`, which is provider-agnostic.
+To add a new AI agent: write one file like `codex-provider.ts`, nothing else changes.
 
-In the [Feishu Open Platform](https://open.feishu.cn/app):
+## Code conventions
 
-1. Create enterprise self-built app
-2. Enable **Bot** capability
-3. Go to **Events & Callbacks** → select **Use persistent connection** (WebSocket)
-4. Subscribe to event: `im.message.receive_v1`
-5. Add scopes:
-   - `im:message` — Send messages
-   - `im:message.receive_v1` — Receive messages
-   - `im:message:readonly` — Read messages
-   - `im:resource` — Upload/download resources
-   - `im:chat:readonly` — Read chat list
-   - `im:message.reactions:write_only` — Typing indicator
-   - `cardkit:card` — CardKit v2 streaming cards
-6. Publish app version
+- TypeScript strict, all types in `src/types.ts`
+- No `any` without a comment explaining why
+- SSE events use `sseEvent(type, data)` helper — always JSON-stringified `data` field
+- Config from `config.env`, never hardcode paths or secrets
+- Logger (`src/logger.ts`) auto-redacts `token`, `secret`, `password`, `api_key` patterns
+- Graceful shutdown: catch signals, close threads, deny pending permissions, write status
+- Windows-compatible: avoid Unix-only assumptions, test `process.platform` where needed
 
-## Start
+## Important gotchas
 
-```bash
-# Daemon mode (macOS launchd, auto-restarts on crash)
-bash scripts/daemon.sh start
+- **ChatGPT Plus users must NOT set CTI_DEFAULT_MODEL** — Codex auto-select fails otherwise
+- **config.toml leftover model settings** cause "not supported with ChatGPT account" errors
+- **`codexPathOverride`** must be resolved in CodexProvider constructor, not inside ReadableStream start callback (Windows ENOENT otherwise)
+- **daemon.sh is macOS-only** (launchd). Windows/Linux users: pm2 or systemd
+- **`spawn EINVAL` on Windows**: the SDK's `createRequire` chain finds the native `.exe` — pass it as `codexPathOverride`
 
-# Check status
-bash scripts/daemon.sh status
+## Auth modes
 
-# View logs
-bash scripts/daemon.sh logs
+| Mode | Setup |
+|------|-------|
+| ChatGPT/Codex subscription | `codex login`, leave `OPENAI_API_KEY` empty |
+| API key | Set `OPENAI_API_KEY` in `config.env` |
+| Third-party | Set both `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
 
-# Stop
-bash scripts/daemon.sh stop
-```
-
-Or foreground for debugging: `npm run dev` or `npm start` (requires build first)
-
-> `daemon.sh` is macOS-only (uses launchd). On other platforms, use `npm run dev` or a process manager like pm2 / systemd.
-
-## Verify It Works
-
-```bash
-bash scripts/daemon.sh logs
-```
-
-Look for these lines in order:
-1. `[ws] client ready` — REST client initialized
-2. `[feishu] Started (botOpenId: ou_xxx)` — Bot identity resolved
-3. `[ws] ws client ready` — WebSocket connected
-
-Then send any message to the bot in Feishu. It should reply via Codex.
-
-## Development
-
-```bash
-npm run typecheck              # TypeScript check (tsc --noEmit)
-npm run dev                    # Foreground mode
-npm run build                  # Production build
-```
-
-## Key Differences from feishu-claude-bridge
-
-| Feature | Claude Bridge | Codex Bridge |
-|---------|--------------|--------------|
-| Provider SDK | `@anthropic-ai/claude-agent-sdk` | `@openai/codex-sdk` |
-| Permission forwarding | Supported (1/2/3 quick reply) | Not supported — use `CTI_AUTO_APPROVE=true` |
-| Session discovery | `~/.claude/projects/` | `~/.codex/session_index.jsonl` |
-| Session resume | `/resume <session_id>` | `/resume <thread_id>` |
-| Auth | `ANTHROPIC_API_KEY` | `OPENAI_API_KEY` or ChatGPT subscription |
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| `Cannot start: missing appId or appSecret` | Check `config.env` exists in the project root and has credentials |
-| WebSocket doesn't connect | Enable "使用长连接接收事件" in Feishu dev console |
-| Bot doesn't respond in group | @mention the bot, or set `CTI_FEISHU_REQUIRE_MENTION=false` |
-| Permission denied / 403 | Add missing scopes in Feishu dev console and republish |
-| `codex` CLI not found | Install Codex CLI, or set `CTI_CODEX_EXECUTABLE` |
-| Card rendering fails | Add `cardkit:card` scope and republish |
-| Codex auth error | Run `codex login` or set `OPENAI_API_KEY`. If using ChatGPT Plus, do NOT set CTI_DEFAULT_MODEL — leave it empty so Codex auto-selects a compatible model. |
-| Codex permission stuck | Set `CTI_AUTO_APPROVE=true` — interactive permission not supported |
+Long docs: [README.md](./README.md).
