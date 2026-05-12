@@ -11,6 +11,8 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import * as lark from '@larksuiteoapi/node-sdk';
 import type {
   InboundMessage,
@@ -710,6 +712,133 @@ export class FeishuClient {
       return { ok: false, error: res?.msg || 'Send failed' };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Send failed' };
+    }
+  }
+
+  // ── File upload (Codex → Feishu) ─────────────────────────────
+
+  /** Image extensions recognized by Feishu image upload API. */
+  private static IMAGE_EXTENSIONS = new Set([
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'ico',
+  ]);
+
+  /** Map file extension → Feishu file_type for im.file.create. */
+  private static FILE_TYPE_MAP: Record<string, string> = {
+    mp4: 'mp4',
+    pdf: 'pdf',
+    doc: 'doc',
+    docx: 'doc',
+    xls: 'xls',
+    xlsx: 'xls',
+    ppt: 'ppt',
+    pptx: 'ppt',
+    opus: 'opus',
+  };
+
+  private async uploadImage(filePath: string): Promise<{ imageKey: string } | null> {
+    if (!this.restClient) return null;
+    try {
+      const buf = fs.readFileSync(filePath);
+      if (buf.length === 0) return null;
+      if (buf.length > 10 * 1024 * 1024) {
+        // Feishu image max 10MB
+        console.warn(`[feishu] Image too large (${(buf.length / 1024 / 1024).toFixed(1)}MB): ${filePath}`);
+        return null;
+      }
+      const res = await this.restClient.im.image.create({
+        data: { image_type: 'message', image: buf },
+      });
+      if (res?.image_key) {
+        return { imageKey: res.image_key };
+      }
+      console.warn(`[feishu] Image upload returned no key: ${filePath}`);
+      return null;
+    } catch (err) {
+      console.warn(`[feishu] Image upload failed: ${filePath}`, err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  private async uploadFile(filePath: string): Promise<{ fileKey: string } | null> {
+    if (!this.restClient) return null;
+    try {
+      const buf = fs.readFileSync(filePath);
+      if (buf.length === 0) return null;
+      if (buf.length > 30 * 1024 * 1024) {
+        // Feishu file max 30MB
+        console.warn(`[feishu] File too large (${(buf.length / 1024 / 1024).toFixed(1)}MB): ${filePath}`);
+        return null;
+      }
+      const ext = path.extname(filePath).toLowerCase().replace('.', '');
+      const fileType = FeishuClient.FILE_TYPE_MAP[ext] || 'stream';
+      const fileName = path.basename(filePath);
+
+      const res = await this.restClient.im.file.create({
+        data: {
+          file_type: fileType as 'opus' | 'mp4' | 'pdf' | 'doc' | 'xls' | 'ppt' | 'stream',
+          file_name: fileName,
+          file: buf,
+        },
+      });
+      if (res?.file_key) {
+        return { fileKey: res.file_key };
+      }
+      console.warn(`[feishu] File upload returned no key: ${filePath}`);
+      return null;
+    } catch (err) {
+      console.warn(`[feishu] File upload failed: ${filePath}`, err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  /**
+   * Upload a file from disk and send it as an image or file message
+   * to the specified chat.  Determines message type from the extension.
+   */
+  async sendFileAsMessage(chatId: string, filePath: string): Promise<SendResult> {
+    if (!this.restClient) {
+      return { ok: false, error: 'Feishu client not initialized' };
+    }
+    if (!fs.existsSync(filePath)) {
+      return { ok: false, error: `File not found: ${filePath}` };
+    }
+
+    const ext = path.extname(filePath).toLowerCase().replace('.', '');
+    const isImage = FeishuClient.IMAGE_EXTENSIONS.has(ext);
+
+    try {
+      let key: string | undefined;
+      let msgType: 'image' | 'file';
+
+      if (isImage) {
+        const result = await this.uploadImage(filePath);
+        if (!result) return { ok: false, error: `Image upload failed: ${filePath}` };
+        key = result.imageKey;
+        msgType = 'image';
+      } else {
+        const result = await this.uploadFile(filePath);
+        if (!result) return { ok: false, error: `File upload failed: ${filePath}` };
+        key = result.fileKey;
+        msgType = 'file';
+      }
+
+      const content = JSON.stringify(
+        isImage ? { image_key: key } : { file_key: key },
+      );
+
+      const res = await this.restClient.im.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: { receive_id: chatId, msg_type: msgType, content },
+      });
+
+      if (res?.data?.message_id) {
+        return { ok: true, messageId: res.data.message_id };
+      }
+      return { ok: false, error: res?.msg || 'Send failed' };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[feishu] sendFileAsMessage failed: ${filePath}`, message);
+      return { ok: false, error: message };
     }
   }
 

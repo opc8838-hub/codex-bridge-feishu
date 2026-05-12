@@ -86,7 +86,8 @@ export type SSEEventType =
   | 'mode_changed'
   | 'task_update'
   | 'keep_alive'
-  | 'done';
+  | 'done'
+  | 'file_output';
 
 // ── Session & Message ────────────────────────────────────────
 
@@ -210,6 +211,14 @@ export interface UpsertChannelBindingInput {
 
 // ── Conversation Result ──────────────────────────────────────
 
+/** Output file produced by an LLM tool (created or modified on disk). */
+export interface FileOutputItem {
+  /** Absolute path to the file on local disk */
+  path: string;
+  /** What happened to the file */
+  kind: 'add' | 'update';
+}
+
 export interface ConversationResult {
   responseText: string;
   tokenUsage: TokenUsage | null;
@@ -217,6 +226,8 @@ export interface ConversationResult {
   errorMessage: string;
   permissionRequests: PermissionRequestInfo[];
   sdkSessionId: string | null;
+  /** Files created or modified during the conversation turn */
+  fileOutputs: FileOutputItem[];
 }
 
 // ── Stream Chat Params ───────────────────────────────────────

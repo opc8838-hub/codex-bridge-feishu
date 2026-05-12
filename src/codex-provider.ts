@@ -415,6 +415,22 @@ export class CodexProvider {
                           is_error: fcItem.status === 'failed',
                         }),
                       );
+
+                      // On item.completed, emit file_output for each
+                      // created/modified file so the bridge can upload
+                      // results (images, documents, etc.) back to Feishu.
+                      if (event.type === 'item.completed') {
+                        for (const change of fcItem.changes) {
+                          if (change.kind === 'delete') continue;
+                          const absPath = path.resolve(workDir, change.path);
+                          controller.enqueue(
+                            sseEvent('file_output', {
+                              path: absPath,
+                              kind: change.kind,
+                            }),
+                          );
+                        }
+                      }
                     }
                   }
 

@@ -16,6 +16,7 @@ import type {
   AppContext,
   ChannelBinding,
   FileAttachment,
+  FileOutputItem,
   SSEEvent,
   TokenUsage,
   MessageContentBlock,
@@ -53,6 +54,7 @@ export async function processMessage(
       hasError: true,
       errorMessage: 'Session is busy processing another request',
       permissionRequests: [],
+      fileOutputs: [],
       sdkSessionId: null,
     };
   }
@@ -148,6 +150,7 @@ async function consumeStream(
   let errorMessage = '';
   const seenToolResultIds = new Set<string>();
   const permissionRequests: PermissionRequestInfo[] = [];
+  const fileOutputs: FileOutputItem[] = [];
   let capturedSdkSessionId: string | null = null;
 
   try {
@@ -255,6 +258,16 @@ async function consumeStream(
             break;
           }
 
+          case 'file_output': {
+            try {
+              const fData = JSON.parse(event.data);
+              if (fData.path && fData.kind) {
+                fileOutputs.push({ path: fData.path, kind: fData.kind });
+              }
+            } catch { /* skip malformed event */ }
+            break;
+          }
+
           case 'error':
             hasError = true;
             errorMessage = event.data || 'Unknown error';
@@ -317,6 +330,7 @@ async function consumeStream(
       hasError,
       errorMessage,
       permissionRequests,
+      fileOutputs,
       sdkSessionId: capturedSdkSessionId,
     };
   } catch (e) {
@@ -349,6 +363,7 @@ async function consumeStream(
       hasError: true,
       errorMessage: isAbort ? 'Task stopped by user' : (e instanceof Error ? e.message : 'Stream consumption error'),
       permissionRequests,
+      fileOutputs,
       sdkSessionId: capturedSdkSessionId,
     };
   }
