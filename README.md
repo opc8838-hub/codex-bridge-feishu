@@ -229,7 +229,31 @@ Once the bridge is running, just send a message to the Feishu bot. Codex will:
 | `/mode ask` | Switch to ask mode |
 | `/usage` | Token usage for current session |
 | `/usage_all` | Token usage across all sessions |
+| `/memory` | View cross-session memory |
 | `/help` | Show available commands |
+
+### Memory Layer
+
+The bridge maintains a persistent memory file at `~/.codex-bridge-memory.md`. Before each conversation, the file content is prepended to your prompt as context. Codex reads it and remembers your preferences, project structures, coding conventions, and other settings across sessions.
+
+**How it works:**
+
+```
+User message → Read ~/.codex-bridge-memory.md → Prepend to prompt → Codex sees:
+  [持久记忆]
+  User's project is at C:\projects, uses TypeScript + Vue3...
+  ---
+  [用户消息]
+  Fix the login bug
+```
+
+**Setting up memory:** Just tell Codex your preferences in Feishu:
+
+> 记住：我的项目在 C:\projects，用 TypeScript，缩进 2 空格，提交用中文 commit message。
+
+Codex will update the memory file. Future sessions automatically include it.
+
+**View/Edit:** Use `/memory` in Feishu, or edit `~/.codex-bridge-memory.md` directly.
 
 ### Group Chat
 
@@ -277,6 +301,8 @@ src/
 | Image attachments | ✅ Paste in Feishu | ✅ `--image` flag |
 | Session management | ✅ `/list`, `/delete` | ❌ Manual file management |
 | Multi-project | ✅ Per-session `workDir` | ❌ One cwd at a time |
+| Cross-session memory | ✅ `MEMORY.md` persistent context | ❌ |
+| File upload | ✅ Auto-upload generated files | ❌ |
 | OTA updates | ✅ Just `git pull` | ❌ `npm update -g` |
 
 ---
